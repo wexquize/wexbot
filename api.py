@@ -3,6 +3,7 @@ import hmac
 import json
 import urllib.parse
 import os
+import asyncio
 import aiohttp
 from aiohttp import web
 
@@ -19,7 +20,14 @@ from database import (
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+# Несколько ключей через запятую для ротации
+GEMINI_API_KEYS = [
+    k.strip() for k in os.getenv("GEMINI_API_KEY", "").split(",") if k.strip()
+]
+
+# Текущий индекс ключа
+_current_key_idx = 0
 
 routes = web.RouteTableDef()
 
@@ -27,7 +35,7 @@ routes = web.RouteTableDef()
 # =========================
 # AUTH
 # =========================
-def validate_init_data(init_data: str) -> dict | None:
+def validate_init_data(init_data: str):
     try:
         parsed = dict(
             urllib.parse.parse_qsl(init_data, keep_blank_values=True)
@@ -61,7 +69,7 @@ def validate_init_data(init_data: str) -> dict | None:
         return None
 
 
-def get_uid(request) -> int | None:
+def get_uid(request):
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("tma "):
         return None
@@ -75,50 +83,39 @@ def get_uid(request) -> int | None:
 
 
 # =========================
-# AI — Gemini
+# AI — Gemini with key rotation
 # =========================
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com"
-    "/v1beta/models/gemini-2.0-flash:generateContent"
-)
-
-SYSTEM_PROMPT = """Ты — умный ассистент внутри приложения wexquize mode.
-Приложение сохраняет удалённые и отредактированные сообщения в Telegram.
-Отвечай коротко, по делу, на русском языке.
-Ты можешь помочь с любыми вопросами пользователя.
-Не упоминай что ты Gemini или Google — ты wexquize AI."""
+SYSTEM_PROMPT = """Ты — wexquize AI, умный ассистент в Telegram Mini App.
+Отвечай кратко, по делу, на русском языке.
+Помогай с любыми вопросами пользователя: код, идеи, советы, объяснения.
+Используй простой markdown: **жирный**, *курсив*, `код`.
+Не упоминай Google или Gemini."""
 
 
-async def ask_gemini(message: str, history: list = None) -> str:
-    if not GEMINI_API_KEY:
-        return "⚠️ AI временно недоступен"
+def get_next_key():
+    """Возвращает следующий ключ по кругу"""
+    global _current_key_idx
+    if not GEMINI_API_KEYS:
+        return None
+    key = GEMINI_API_KEYS[_current_key_idx % len(GEMINI_API_KEYS)]
+    _current_key_idx += 1
+    return key
 
-    contents = []
 
-    # Системный промпт
-    contents.append({
-        "role": "user",
-        "parts": [{"text": f"[SYSTEM]: {SYSTEM_PROMPT}"}]
-    })
-    contents.append({
-        "role": "model",
-        "parts": [{"text": "Понял, я wexquize AI. Готов помочь!"}]
-    })
+# Список моделей для перебора
+MODELS = [
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash",
+    "gemini-pro",
+]
 
-    # История диалога
-    if history:
-        for msg in history[-10:]:  # Последние 10 сообщений
-            role = "user" if msg["role"] == "user" else "model"
-            contents.append({
-                "role": role,
-                "parts": [{"text": msg["text"]}]
-            })
 
-    # Текущее сообщение
-    contents.append({
-        "role": "user",
-        "parts": [{"text": message}]
-    })
+async def call_gemini(api_key, model, contents):
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/"
+        f"models/{model}:generateContent?key={api_key}"
+    )
 
     payload = {
         "contents": contents,
@@ -126,37 +123,105 @@ async def ask_gemini(message: str, history: list = None) -> str:
             "temperature": 0.7,
             "maxOutputTokens": 1024,
             "topP": 0.95,
-        }
+        },
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{GEMINI_URL}?key={GEMINI_API_KEY}",
+                url,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=30)
             ) as resp:
-                if resp.status != 200:
-                    err = await resp.text()
-                    print(f"Gemini {resp.status}: {err[:200]}")
-                    return "⚠️ AI временно недоступен, попробуй позже"
-
-                data = await resp.json()
-                candidates = data.get("candidates", [])
-                if not candidates:
-                    return "🤔 Не удалось получить ответ"
-
-                parts = candidates[0].get("content", {}).get("parts", [])
-                if not parts:
-                    return "🤔 Пустой ответ"
-
-                return parts[0].get("text", "🤔 Нет текста")
-
+                status = resp.status
+                text = await resp.text()
+                return status, text
     except asyncio.TimeoutError:
-        return "⏳ AI думает слишком долго, попробуй позже"
+        return 504, "timeout"
     except Exception as e:
-        print(f"Gemini error: {e}")
-        return "⚠️ Ошибка AI"
+        return 0, str(e)
+
+
+async def ask_gemini(message: str, history: list = None):
+    if not GEMINI_API_KEYS:
+        return "⚠️ AI не настроен"
+
+    print(f"🤖 AI запрос: {message[:60]}")
+
+    # Формируем контекст
+    contents = [
+        {
+            "role": "user",
+            "parts": [{"text": f"[ИНСТРУКЦИЯ]: {SYSTEM_PROMPT}"}]
+        },
+        {
+            "role": "model",
+            "parts": [{"text": "Понял! Готов помочь."}]
+        }
+    ]
+
+    if history:
+        for msg in history[-10:]:
+            role = "user" if msg.get("role") == "user" else "model"
+            contents.append({
+                "role": role,
+                "parts": [{"text": msg.get("text", "")}]
+            })
+
+    contents.append({
+        "role": "user",
+        "parts": [{"text": message}]
+    })
+
+    # Перебираем все комбинации ключ + модель
+    last_error = "?"
+    for key_attempt in range(len(GEMINI_API_KEYS)):
+        api_key = get_next_key()
+        if not api_key:
+            continue
+
+        for model in MODELS:
+            status, text = await call_gemini(api_key, model, contents)
+
+            if status == 200:
+                try:
+                    data = json.loads(text)
+                    candidates = data.get("candidates", [])
+                    if not candidates:
+                        continue
+
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if not parts:
+                        continue
+
+                    answer = parts[0].get("text", "").strip()
+                    if answer:
+                        print(f"✅ AI ответ от {model}")
+                        return answer
+                except Exception as e:
+                    print(f"Parse err: {e}")
+                    continue
+
+            elif status == 429:
+                print(f"⚠️ Limit {model} key#{key_attempt}, пробую дальше")
+                last_error = "429 (лимит)"
+                continue
+
+            elif status == 404:
+                # Модель не найдена — пробуем следующую
+                continue
+
+            else:
+                print(f"⚠️ {model} status={status}: {text[:200]}")
+                last_error = f"{status}"
+
+    return f"⚠️ AI временно недоступен ({last_error}). Попробуй через минуту."
 
 
 # =========================
@@ -164,7 +229,10 @@ async def ask_gemini(message: str, history: list = None) -> str:
 # =========================
 @routes.get("/health")
 async def health(request):
-    return web.json_response({"status": "ok"})
+    return web.json_response({
+        "status": "ok",
+        "ai_keys": len(GEMINI_API_KEYS)
+    })
 
 
 @routes.get("/api/stats")
@@ -173,18 +241,22 @@ async def api_stats(request):
     if not uid:
         return web.json_response({"error": "Unauthorized"}, status=401)
 
-    stats = get_stats_for_user(uid)
-    premium = get_premium_info(uid)
-    refs = get_referral_count(uid)
+    try:
+        stats = await get_stats_for_user(uid)
+        premium = await get_premium_info(uid)
+        refs = await get_referral_count(uid)
 
-    return web.json_response({
-        "deleted_count": stats.get("deleted", 0),
-        "edited_count": stats.get("edited", 0),
-        "total_saved": stats.get("total", 0),
-        "chats_count": stats.get("chats", 0),
-        "premium": premium or {"active": False},
-        "referrals": refs
-    })
+        return web.json_response({
+            "deleted_count": stats.get("deleted", 0),
+            "edited_count": stats.get("edited", 0),
+            "total_saved": stats.get("total", 0),
+            "chats_count": stats.get("chats", 0),
+            "premium": premium or {"active": False},
+            "referrals": refs
+        })
+    except Exception as e:
+        print(f"Stats err: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 
 @routes.get("/api/chats")
@@ -193,8 +265,12 @@ async def api_chats(request):
     if not uid:
         return web.json_response({"error": "Unauthorized"}, status=401)
 
-    chats = get_chat_list_for_user(uid)
-    return web.json_response({"chats": chats})
+    try:
+        chats = await get_chat_list_for_user(uid)
+        return web.json_response({"chats": chats})
+    except Exception as e:
+        print(f"Chats err: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 
 @routes.get("/api/deleted")
@@ -207,8 +283,12 @@ async def api_deleted(request):
     limit = int(request.query.get("limit", 20))
     chat_id = request.query.get("chat_id")
 
-    msgs = get_deleted_messages_for_user(uid, page, limit, chat_id)
-    return web.json_response({"messages": msgs, "page": page})
+    try:
+        msgs = await get_deleted_messages_for_user(uid, page, limit, chat_id)
+        return web.json_response({"messages": msgs, "page": page})
+    except Exception as e:
+        print(f"Deleted err: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 
 @routes.get("/api/edited")
@@ -220,8 +300,12 @@ async def api_edited(request):
     page = int(request.query.get("page", 1))
     limit = int(request.query.get("limit", 20))
 
-    msgs = get_edited_messages_for_user(uid, page, limit)
-    return web.json_response({"messages": msgs, "page": page})
+    try:
+        msgs = await get_edited_messages_for_user(uid, page, limit)
+        return web.json_response({"messages": msgs, "page": page})
+    except Exception as e:
+        print(f"Edited err: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 
 @routes.get("/api/chat/{chat_id}")
@@ -233,8 +317,12 @@ async def api_chat(request):
     chat_id = request.match_info["chat_id"]
     page = int(request.query.get("page", 1))
 
-    msgs = get_messages_by_chat(uid, chat_id, page, 30)
-    return web.json_response({"messages": msgs, "page": page})
+    try:
+        msgs = await get_messages_by_chat(uid, chat_id, page, 30)
+        return web.json_response({"messages": msgs, "page": page})
+    except Exception as e:
+        print(f"Chat err: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 
 @routes.get("/api/search")
@@ -247,8 +335,12 @@ async def api_search(request):
     if len(q) < 2:
         return web.json_response({"results": []})
 
-    results = search_messages_for_user(uid, q)
-    return web.json_response({"results": results})
+    try:
+        results = await search_messages_for_user(uid, q)
+        return web.json_response({"results": results})
+    except Exception as e:
+        print(f"Search err: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 
 @routes.post("/api/ai")
@@ -272,40 +364,9 @@ async def api_ai(request):
         )
 
     history = body.get("history", [])
-
     answer = await ask_gemini(message, history)
 
     return web.json_response({"reply": answer})
-
-
-@routes.get("/api/export")
-async def api_export(request):
-    uid = get_uid(request)
-    if not uid:
-        return web.json_response({"error": "Unauthorized"}, status=401)
-
-    if not is_premium_user(uid):
-        return web.json_response(
-            {"error": "Premium required"}, status=403
-        )
-
-    msgs = get_deleted_messages_for_user(uid, 1, 500)
-
-    lines = ["=== wexquize mode export ===", ""]
-    for m in msgs:
-        dt = m.get("deleted_at") or m.get("date", "")
-        name = m.get("from_name", "?")
-        txt = m.get("text") or f"[{m.get('media_type', 'media')}]"
-        lines.append(f"[{dt}] {name}: {txt}")
-
-    return web.Response(
-        text="\n".join(lines),
-        content_type="text/plain",
-        headers={
-            "Content-Disposition":
-                'attachment; filename="deleted.txt"'
-        }
-    )
 
 
 # =========================
