@@ -73,11 +73,17 @@ def is_admin(request):
     return uid == ADMIN_ID if uid else False
 
 
-SYSTEM_PROMPT = """Ты — wexquize AI, умный ассистент.
-Отвечай кратко, на русском.
-Используй markdown: **жирный**, *курсив*, `код`.
-Не упоминай Google или Gemini."""
+SYSTEM_PROMPT = """Ты — wexquize AI, продвинутый ассистент в Telegram.
 
+ПРАВИЛА:
+- Отвечай на русском языке
+- Будь полезным, умным и дружелюбным
+- Давай развёрнутые ответы когда нужно, краткие — когда уместно
+- Используй markdown: **жирный**, *курсив*, `код`, списки
+- Помогай с кодом, идеями, объяснениями, советами, переводами
+- Если не знаешь — честно скажи
+- НЕ упоминай Google, Gemini, что ты модель ИИ
+- Ты — wexquize AI, точка"""
 
 def get_next_key():
     global _current_key_idx
@@ -108,8 +114,10 @@ async def call_gemini(api_key, model, contents):
     payload = {
         "contents": contents,
         "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 1024,
+            "temperature": 0.9,
+            "maxOutputTokens": 2048,
+            "topP": 0.95,
+            "topK": 40,
         },
         "safetySettings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -123,7 +131,7 @@ async def call_gemini(api_key, model, contents):
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 url, json=payload,
-                timeout=aiohttp.ClientTimeout(total=30)
+                timeout=aiohttp.ClientTimeout(total=60)
             ) as resp:
                 return resp.status, await resp.text()
     except asyncio.TimeoutError:
@@ -139,8 +147,8 @@ async def ask_gemini(message, history=None):
     print(f"🤖 AI: '{message[:50]}', ключей={len(GEMINI_API_KEYS)}")
 
     contents = [
-        {"role": "user", "parts": [{"text": f"[SYSTEM]: {SYSTEM_PROMPT}"}]},
-        {"role": "model", "parts": [{"text": "Готов помочь!"}]}
+        {"role": "user", "parts": [{"text": SYSTEM_PROMPT}]},
+        {"role": "model", "parts": [{"text": "Понял! Я wexquize AI, готов помочь с любыми вопросами."}]}
     ]
 
     if history:
@@ -184,8 +192,7 @@ async def ask_gemini(message, history=None):
             else:
                 errors.append(f"{model}:{status}")
 
-    return "⚠️ AI временно недоступен. Все ключи и модели исчерпали лимит.\nПодожди немного или добавь ещё ключи в настройки."
-
+    return "⚠️ AI временно недоступен. Подожди минуту."
 
 @routes.get("/health")
 async def health(request):
