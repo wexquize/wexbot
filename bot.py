@@ -16,7 +16,7 @@ async def start_api():
         await runner.setup()
         site = web.TCPSite(runner, '0.0.0.0', API_PORT)
         await site.start()
-        print(f"✅ API запущен на порту {API_PORT}")
+        print(f"✅ API на порту {API_PORT}")
     except Exception as e:
         print(f"⚠️ API ошибка: {e}")
         import traceback
@@ -24,7 +24,6 @@ async def start_api():
 
 
 async def main():
-    # Проверка переменных окружения
     if not BOT_TOKEN:
         print("❌ BOT_TOKEN не задан!")
         return
@@ -33,40 +32,35 @@ async def main():
         print("❌ DATABASE_URL не задан!")
         return
 
-    # Инициализация базы данных
     try:
         await init_db()
     except Exception as e:
-        print(f"❌ Ошибка инициализации БД: {e}")
+        print(f"❌ БД ошибка: {e}")
         import traceback
         traceback.print_exc()
         return
 
-    # Создаём бота
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(router)
 
-    # Удаляем webhook на случай если был установлен
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         print("✅ Webhook очищен")
     except Exception as e:
         print(f"⚠️ Webhook: {e}")
 
-    # Запускаем API
     await start_api()
 
-    print("🤖 Бот запущен и слушает обновления...")
+    print("🤖 Бот запущен")
 
-    # Polling
     try:
         await dp.start_polling(
             bot,
             allowed_updates=dp.resolve_used_update_types()
         )
     except Exception as e:
-        print(f"❌ Polling error: {e}")
+        print(f"❌ Polling: {e}")
     finally:
         await bot.session.close()
 
