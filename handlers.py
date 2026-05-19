@@ -1,6 +1,8 @@
 from aiogram import Router
-from aiogram.types import Message, BusinessConnection, BusinessMessagesDeleted
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from aiogram.types import (
+    Message, BusinessConnection, BusinessMessagesDeleted,
+    InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+)
 from aiogram.filters import CommandStart, Command
 from database import (
     save_message,
@@ -15,21 +17,19 @@ from database import (
     add_referral,
     get_referral_count,
     get_all_users_info,
-    get_username_by_id
+    get_username_by_id,
+    mark_message_deleted
 )
-from config import ADMIN_ID, REFERRALS_FOR_PREMIUM
+from config import ADMIN_ID, REFERRALS_FOR_PREMIUM, MINIAPP_URL
 from datetime import datetime
 
 router = Router()
 
-MINIAPP_URL = "https://wexquize.github.io/wexbot/"
 
-
-def get_main_keyboard():
-    """Главная клавиатура с кнопкой Mini App"""
+def app_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(
-            text="👁 Открыть в приложении",
+            text="📱 Открыть wexquize mode",
             web_app=WebAppInfo(url=MINIAPP_URL)
         )
     ]])
@@ -39,6 +39,7 @@ def get_main_keyboard():
 async def cmd_start(message: Message):
     user_id = message.from_user.id
 
+    # Реферальная система
     if message.text and message.text.startswith("/start ref_"):
         try:
             referrer_id = int(message.text.split("ref_")[1])
@@ -47,40 +48,45 @@ async def cmd_start(message: Message):
                     ref_count = get_referral_count(referrer_id)
                     await message.bot.send_message(
                         referrer_id,
-                        f"🎉 <b>Новый реферал!</b>\n\n"
-                        f"👤 {message.from_user.full_name} подключил бота!\n"
-                        f"📊 Рефералов: {ref_count}/{REFERRALS_FOR_PREMIUM}",
+                        f"🎉 Новый реферал!\n"
+                        f"👤 {message.from_user.full_name}\n"
+                        f"📊 {ref_count}/{REFERRALS_FOR_PREMIUM}",
                         parse_mode="HTML"
                     )
                     if ref_count >= REFERRALS_FOR_PREMIUM and not is_premium_user(referrer_id):
                         set_premium(referrer_id, True, days=30)
                         await message.bot.send_message(
                             referrer_id,
-                            "⭐ <b>Поздравляем! Ты получил Premium на 30 дней бесплатно!</b> 🎁",
+                            "⭐ <b>Premium на 30 дней получен бесплатно!</b>",
                             parse_mode="HTML"
                         )
-                    save_user(user_id, message.from_user.username or "", referred_by=referrer_id)
+                    save_user(
+                        user_id,
+                        message.from_user.username or "",
+                        referred_by=referrer_id
+                    )
         except Exception as e:
-            print(f"Ошибка реферала: {e}")
+            print(f"Ref error: {e}")
 
     save_user(user_id, message.from_user.username or "")
-    
+
     await message.answer(
-        "👁 <b>wexquize mode — бот для сохранения удалённых сообщений</b>\n\n"
-        "📱 <b>Инструкция по подключению:</b>\n\n"
-        "1️⃣ Открой <b>Настройки профиля</b> в Telegram\n"
-        "2️⃣ Найди раздел <b>«Автоматизация чатов»</b>\n"
-        "3️⃣ Нажми <b>«Добавить бота»</b>\n"
-        "4️⃣ Выбери этого бота из списка\n"
-        "5️⃣ Подтверди подключение\n\n"
-        "✨ После подключения бот автоматически начнёт сохранять все входящие сообщения.\n\n"
-        "🔒 <b>Как это работает:</b>\n"
-        "• Все сообщения сохраняются автоматически\n"
-        "• Редактирования отслеживаются\n"
-        "• Если кто-то удалит сообщение — я пришлю тебе копию\n\n"
-        "💎 Для изучения доступных тарифов введи команду /premium",
+        "👁 <b>wexquize mode</b>\n\n"
+        "Бот сохраняет удалённые и изменённые сообщения.\n\n"
+        "📱 <b>Подключение:</b>\n"
+        "Настройки → Автоматизация чатов → Добавить бота\n\n"
+        "Всё управление — в приложении 👇",
         parse_mode="HTML",
-        reply_markup=get_main_keyboard()  # 👈 Кнопка добавлена
+        reply_markup=app_keyboard()
+    )
+
+
+@router.message(Command("app"))
+async def cmd_app(message: Message):
+    await message.answer(
+        "👁 <b>wexquize mode</b>",
+        parse_mode="HTML",
+        reply_markup=app_keyboard()
     )
 
 
@@ -88,219 +94,113 @@ async def cmd_start(message: Message):
 async def cmd_ref(message: Message):
     user_id = message.from_user.id
     ref_count = get_referral_count(user_id)
-    bot_username = (await message.bot.me()).username
-    ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    bot_me = await message.bot.me()
+    ref_link = f"https://t.me/{bot_me.username}?start=ref_{user_id}"
     await message.answer(
         f"🎁 <b>Реферальная программа</b>\n\n"
-        f"👥 Приглашено: {ref_count}/{REFERRALS_FOR_PREMIUM}\n\n"
-        f"🔗 <b>Ссылка:</b>\n<code>{ref_link}</code>\n\n"
-        f"⭐ После {REFERRALS_FOR_PREMIUM} рефералов получишь Premium на 30 дней!",
+        f"👥 {ref_count}/{REFERRALS_FOR_PREMIUM}\n\n"
+        f"🔗 <code>{ref_link}</code>\n\n"
+        f"⭐ {REFERRALS_FOR_PREMIUM} рефералов = Premium 30 дней",
         parse_mode="HTML"
     )
 
 
+# =========================
+# ADMIN COMMANDS
+# =========================
 @router.message(Command("premium"))
-async def cmd_premium(message: Message):
-    if message.from_user.id == ADMIN_ID:
-        args = message.text.split()
-        
-        if len(args) >= 2 and args[1] != "remove":
+async def cmd_premium_admin(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer(
+            "Всё в приложении 👇",
+            reply_markup=app_keyboard()
+        )
+        return
+
+    args = message.text.split()
+
+    if len(args) >= 2 and args[1] != "remove":
+        try:
+            uid = int(args[1])
+            days = int(args[2]) if len(args) >= 3 else 30
+            set_premium(uid, True, days=days)
+            label = "♾️" if days == 0 else f"{days}д"
+            await message.answer(f"✅ Premium {label} → {uid}")
             try:
-                uid = int(args[1])
-                days = int(args[2]) if len(args) == 3 else 30
-                
-                set_premium(uid, True, days=days)
-                
-                if days == 0:
-                    await message.answer(f"✅ Бесконечный Premium выдан пользователю {uid}")
-                    premium_text = "бесконечный Premium"
-                else:
-                    await message.answer(f"✅ Premium на {days} дней выдан пользователю {uid}")
-                    premium_text = f"Premium на {days} дней"
-                
-                try:
-                    await message.bot.send_message(
-                        uid,
-                        f"⭐ <b>Поздравляем!</b>\n\n"
-                        f"Тебе выдан {premium_text}! 🎁\n\n"
-                        f"Теперь доступны:\n"
-                        f"📸 Фото и видео\n"
-                        f"📁 Документы\n"
-                        f"🎤 Голосовые\n"
-                        f"🎭 Стикеры",
-                        parse_mode="HTML"
-                    )
-                except Exception:
-                    await message.answer("⚠️ Не удалось уведомить пользователя")
-                    
-            except ValueError:
-                await message.answer("❌ Неверный формат. Используй: /premium USER_ID [DAYS]")
-        
-        elif len(args) == 3 and args[1] == "remove":
-            try:
-                uid = int(args[2])
-                remove_premium(uid)
-                
-                await message.answer(f"✅ Premium отобран у пользователя {uid}")
-                
-                try:
-                    await message.bot.send_message(
-                        uid,
-                        "❌ <b>Ваша подписка была обнулена</b>\n\n"
-                        "Если вы считаете, что её обнулили по ошибке, "
-                        "напишите владельцу бота: @wexquize",
-                        parse_mode="HTML"
-                    )
-                except Exception:
-                    await message.answer("⚠️ Не удалось уведомить пользователя")
-                    
-            except ValueError:
-                await message.answer("❌ Неверный ID")
-        else:
-            await message.answer(
-                "ℹ️ <b>Команды админа:</b>\n\n"
-                "/premium USER_ID [DAYS] — выдать Premium\n"
-                "  (0 дней = бесконечный)\n"
-                "/premium remove USER_ID — отобрать Premium\n"
-                "/users — список всех пользователей",
-                parse_mode="HTML"
-            )
+                await message.bot.send_message(
+                    uid,
+                    f"⭐ <b>Тебе выдан Premium!</b>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+        except ValueError:
+            await message.answer("❌ /premium UID [DAYS]")
+
+    elif len(args) == 3 and args[1] == "remove":
+        try:
+            uid = int(args[2])
+            remove_premium(uid)
+            await message.answer(f"✅ Premium убран у {uid}")
+        except ValueError:
+            await message.answer("❌ /premium remove UID")
     else:
-        premium_info = get_premium_info(message.from_user.id)
-        
-        if premium_info and premium_info['active']:
-            if premium_info.get('permanent'):
-                await message.answer(
-                    "⭐ <b>У тебя бесконечный Premium!</b> ♾️",
-                    parse_mode="HTML",
-                    reply_markup=get_main_keyboard()
-                )
-            elif premium_info['days_left'] is not None:
-                await message.answer(
-                    f"⭐ <b>У тебя есть Premium!</b>\n\n"
-                    f"📅 Осталось дней: {premium_info['days_left']}",
-                    parse_mode="HTML",
-                    reply_markup=get_main_keyboard()
-                )
-            else:
-                await message.answer(
-                    "⭐ У тебя есть Premium!",
-                    reply_markup=get_main_keyboard()
-                )
-        else:
-            await message.answer(
-                "⭐ <b>wexquize mode Premium</b>\n\n"
-                "🆓 <b>Бесплатная версия:</b>\n"
-                "• Текстовые сообщения\n\n"
-                "💎 <b>Premium версия:</b>\n"
-                "• Фото и видео\n"
-                "• Файлы и документы\n"
-                "• Голосовые сообщения\n"
-                "• Стикеры\n\n"
-                "💰 <b>Приобрести:</b> @wexquize\n"
-                "🎁 <b>Получить бесплатно:</b> /ref",
-                parse_mode="HTML"
-            )
+        await message.answer(
+            "/premium UID [DAYS]\n"
+            "/premium remove UID\n"
+            "/users"
+        )
 
 
 @router.message(Command("users"))
 async def cmd_users(message: Message):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
         return
-    
+
     users = get_all_users_info()
-    
     if not users:
-        await message.answer("📝 Пользователей пока нет")
+        await message.answer("Нет пользователей")
         return
-    
-    total_users = len(users)
-    premium_users = sum(1 for u in users if u[2])
-    free_users = total_users - premium_users
-    
-    text = (
-        f"👥 <b>СПИСОК ПОЛЬЗОВАТЕЛЕЙ</b>\n"
-        f"═══════════════════════════════\n"
-        f"📊 Всего: {total_users}\n"
-        f"⭐ Premium: {premium_users}\n"
-        f"🆓 Free: {free_users}\n"
-        f"═══════════════════════════════\n\n"
-    )
-    
-    for user_id, username, is_premium, connected_at, premium_until, referred_by in users:
-        if is_premium:
-            if premium_until == "permanent":
-                status = "⭐ Premium ♾️"
-            elif premium_until:
-                try:
-                    until = datetime.fromisoformat(premium_until)
-                    days_left = (until - datetime.now()).days
-                    status = f"⭐ Premium ({days_left}д)"
-                except Exception:
-                    status = "⭐ Premium"
-            else:
-                status = "⭐ Premium"
-        else:
-            status = "🆓 Free"
-        
+
+    total = len(users)
+    prem = sum(1 for u in users if u[2])
+    text = f"👥 {total} (⭐{prem})\n\n"
+
+    for uid, uname, is_prem, conn_at, prem_until, ref_by in users:
+        name = f"@{uname}" if uname else f"ID{uid}"
+        s = "⭐" if is_prem else "🆓"
         try:
-            connected = datetime.fromisoformat(connected_at)
-            date_str = connected.strftime("%d.%m.%Y")
+            d = datetime.fromisoformat(conn_at).strftime("%d.%m")
         except Exception:
-            date_str = "?"
-        
-        if referred_by:
-            referrer_name = get_username_by_id(referred_by)
-            ref_info = f"@{referrer_name}" if referrer_name != "Unknown" else f"ID{referred_by}"
-        else:
-            ref_info = "—"
-        
-        display_name = f"@{username}" if username else f"ID{user_id}"
-        
-        user_line = (
-            f"<b>{display_name}</b>\n"
-            f"├ ID: <code>{user_id}</code>\n"
-            f"├ {status}\n"
-            f"├ 📅 {date_str}\n"
-            f"└ Реф: {ref_info}\n\n"
-        )
-        
-        if len(text + user_line) > 4000:
+            d = "?"
+        line = f"{s} {name} · <code>{uid}</code> · {d}\n"
+        if len(text + line) > 4000:
             await message.answer(text, parse_mode="HTML")
-            text = user_line
+            text = line
         else:
-            text += user_line
-    
+            text += line
+
     if text:
         await message.answer(text, parse_mode="HTML")
 
 
-@router.message(Command("app"))
-async def cmd_app(message: Message):
-    await message.answer(
-        "👁 <b>wexquize mode App</b>\n\n"
-        "Статистика, история и ИИ — всё здесь.",
-        reply_markup=get_main_keyboard(),
-        parse_mode="HTML"
-    )
-
-
+# =========================
+# BUSINESS
+# =========================
 @router.business_connection()
 async def on_business_connect(event: BusinessConnection):
-    save_user(event.user.id, event.user.username or "", is_premium=False)
+    save_user(event.user.id, event.user.username or "")
     try:
         if event.is_enabled:
             await event.bot.send_message(
                 event.user.id,
                 "✅ <b>wexquize mode подключён!</b>\n\n"
-                "Теперь я сохраняю все сообщения 🚀\n\n"
-                "/premium — изучить тарифы\n"
-                "/ref — реферальная программа",
-                parse_mode="HTML"
+                "Сообщения сохраняются автоматически 🚀",
+                parse_mode="HTML",
+                reply_markup=app_keyboard()
             )
     except Exception as e:
-        print(f"Ошибка подключения: {e}")
+        print(f"Connect error: {e}")
 
 
 @router.business_message()
@@ -312,13 +212,12 @@ async def on_business_message(message: Message):
         save_message(message, message.business_connection_id)
 
         if (message.photo or message.video or message.voice
-                or message.video_note or message.document or message.sticker):
+                or message.video_note or message.document
+                or message.sticker):
             save_disappearing(message, message.business_connection_id)
 
-        print(f"✅ Сохранено: msg_id={message.message_id}")
-
     except Exception as e:
-        print(f"❌ Ошибка сохранения: {e}")
+        print(f"Save error: {e}")
 
 
 @router.edited_business_message()
@@ -327,45 +226,61 @@ async def on_business_edit(message: Message):
         if not message.business_connection_id:
             return
 
-        old_msg = get_message(message.message_id, message.chat.id, message.business_connection_id)
+        old_msg = get_message(
+            message.message_id,
+            message.chat.id,
+            message.business_connection_id
+        )
         if not old_msg:
             return
 
         old_text = old_msg[5]
         new_text = message.text or message.caption
-
         if old_text == new_text:
             return
 
-        from_name = message.from_user.full_name if message.from_user else "Неизвестно"
-        from_username = message.from_user.username if message.from_user else None
-        
-        if from_username:
-            display_name = f"@{from_username}"
-        else:
-            display_name = f"<a href='tg://user?id={message.from_user.id}'>{from_name}</a>"
-        
-        save_edit(message.message_id, message.chat.id, from_name,
-                  old_text or "", new_text or "", message.business_connection_id)
+        from_name = ""
+        from_username = None
+        if message.from_user:
+            from_name = message.from_user.full_name
+            from_username = message.from_user.username
 
-        bc = await message.bot.get_business_connection(message.business_connection_id)
+        if from_username:
+            display = f"@{from_username}"
+        elif message.from_user:
+            display = (
+                f"<a href='tg://user?id={message.from_user.id}'>"
+                f"{from_name}</a>"
+            )
+        else:
+            display = from_name
+
+        save_edit(
+            message.message_id, message.chat.id, from_name,
+            old_text or "", new_text or "",
+            message.business_connection_id
+        )
+
+        bc = await message.bot.get_business_connection(
+            message.business_connection_id
+        )
         owner_id = bc.user.id
 
         await message.bot.send_message(
             owner_id,
-            f"✏️ <b>ОТРЕДАКТИРОВАНО</b>\n"
-            f"───────────────────\n"
-            f"👤 {display_name}\n"
-            f"───────────────────\n\n"
-            f"<b>Было:</b>\n<blockquote>{old_text or '(пусто)'}</blockquote>\n\n"
-            f"<b>Стало:</b>\n<blockquote>{new_text or '(пусто)'}</blockquote>",
+            f"✏️ <b>Редактирование</b>\n"
+            f"👤 {display}\n\n"
+            f"<b>Было:</b>\n"
+            f"<blockquote>{old_text or '(пусто)'}</blockquote>\n\n"
+            f"<b>Стало:</b>\n"
+            f"<blockquote>{new_text or '(пусто)'}</blockquote>",
             parse_mode="HTML"
         )
 
         save_message(message, message.business_connection_id)
 
     except Exception as e:
-        print(f"❌ Ошибка редактирования: {e}")
+        print(f"Edit error: {e}")
 
 
 @router.deleted_business_messages()
@@ -381,70 +296,109 @@ async def on_messages_deleted(event: BusinessMessagesDeleted):
                 if not row:
                     continue
 
-                _, _, chat_id, from_id, from_name, text, media_type, file_id, date, _ = row
+                (_, _, chat_id, from_id, from_name,
+                 text, media_type, file_id, date, _) = row
 
+                # Помечаем удалённым в БД
+                mark_message_deleted(msg_id, event.chat.id, conn_id)
+
+                # Не уведомляем если владелец удалил своё
                 if from_id == owner_id:
-                    print(f"⏭️ Пропуск: владелец удалил своё сообщение {msg_id}")
                     continue
 
+                # Определяем имя
                 username = get_username_by_id(from_id) if from_id else None
-                
                 if username and username != "Unknown":
-                    display_name = f"@{username}"
+                    display = f"@{username}"
                 elif from_id:
-                    display_name = f"<a href='tg://user?id={from_id}'>{from_name}</a>"
+                    display = (
+                        f"<a href='tg://user?id={from_id}'>"
+                        f"{from_name}</a>"
+                    )
                 else:
-                    display_name = from_name
+                    display = from_name
 
                 premium = is_premium_user(owner_id)
-                time_str = date[:16].replace('T', ' ')
+                time_str = ""
+                if date:
+                    time_str = date[:16].replace('T', ' ')
 
                 header = (
-                    f"🗑️ <b>УДАЛЕНО</b>\n"
-                    f"───────────────────\n"
-                    f"👤 {display_name}\n"
-                    f"🕐 {time_str}\n"
-                    f"───────────────────"
+                    f"🗑️ <b>Удалено</b>\n"
+                    f"👤 {display}\n"
+                    f"🕐 {time_str}"
                 )
 
                 if media_type is None:
+                    # Текстовое
                     await event.bot.send_message(
                         owner_id,
-                        header + f"\n\n<blockquote>{text or '(пусто)'}</blockquote>",
-                        parse_mode="HTML"
-                    )
-                elif premium:
-                    if media_type == "photo":
-                        await event.bot.send_photo(owner_id, file_id, caption=header, parse_mode="HTML")
-                    elif media_type == "video":
-                        await event.bot.send_video(owner_id, file_id, caption=header, parse_mode="HTML")
-                    elif media_type == "voice":
-                        await event.bot.send_voice(owner_id, file_id, caption=header, parse_mode="HTML")
-                    elif media_type == "document":
-                        await event.bot.send_document(owner_id, file_id, caption=header, parse_mode="HTML")
-                    elif media_type == "sticker":
-                        await event.bot.send_message(owner_id, header, parse_mode="HTML")
-                        await event.bot.send_sticker(owner_id, file_id)
-                    elif media_type == "video_note":
-                        await event.bot.send_message(owner_id, header, parse_mode="HTML")
-                        await event.bot.send_video_note(owner_id, file_id)
-                else:
-                    emoji_map = {
-                        "photo": "📸",
-                        "video": "🎥",
-                        "voice": "🎤",
-                        "document": "📁",
-                        "sticker": "🎭",
-                        "video_note": "📹"
-                    }
-                    emoji = emoji_map.get(media_type, "📎")
-                    await event.bot.send_message(
-                        owner_id,
-                        header + f"\n\n{emoji} Медиа недоступно\n💎 /premium",
+                        header + f"\n\n<blockquote>"
+                        f"{text or '(пусто)'}</blockquote>",
                         parse_mode="HTML"
                     )
 
+                elif premium:
+                    # Premium — отправляем медиа
+                    try:
+                        if media_type == "photo":
+                            await event.bot.send_photo(
+                                owner_id, file_id,
+                                caption=header, parse_mode="HTML"
+                            )
+                        elif media_type == "video":
+                            await event.bot.send_video(
+                                owner_id, file_id,
+                                caption=header, parse_mode="HTML"
+                            )
+                        elif media_type == "voice":
+                            await event.bot.send_voice(
+                                owner_id, file_id,
+                                caption=header, parse_mode="HTML"
+                            )
+                        elif media_type == "document":
+                            await event.bot.send_document(
+                                owner_id, file_id,
+                                caption=header, parse_mode="HTML"
+                            )
+                        elif media_type == "sticker":
+                            await event.bot.send_message(
+                                owner_id, header, parse_mode="HTML"
+                            )
+                            await event.bot.send_sticker(
+                                owner_id, file_id
+                            )
+                        elif media_type == "video_note":
+                            await event.bot.send_message(
+                                owner_id, header, parse_mode="HTML"
+                            )
+                            await event.bot.send_video_note(
+                                owner_id, file_id
+                            )
+                    except Exception:
+                        await event.bot.send_message(
+                            owner_id,
+                            header + f"\n\n📎 {media_type}",
+                            parse_mode="HTML"
+                        )
+
+                else:
+                    # Free — без медиа
+                    emoji_map = {
+                        "photo": "📸", "video": "🎥",
+                        "voice": "🎤", "document": "📁",
+                        "sticker": "🎭", "video_note": "📹"
+                    }
+                    e = emoji_map.get(media_type, "📎")
+                    await event.bot.send_message(
+                        owner_id,
+                        header + f"\n\n{e} Медиа · Откройте приложение",
+                        parse_mode="HTML",
+                        reply_markup=app_keyboard()
+                    )
+
             except Exception as e:
-                print(f"❌ Ошибка удаления {msg_id}: {e}")
+                print(f"Del {msg_id} error: {e}")
+
     except Exception as e:
-        print(f"❌ Ошибка deleted: {e}")
+        print(f"Deleted error: {e}")
