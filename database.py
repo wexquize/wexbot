@@ -2,7 +2,6 @@ import os
 import asyncio
 import asyncpg
 from datetime import datetime, timedelta
-from urllib.parse import unquote
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
@@ -13,40 +12,37 @@ async def get_pool():
     global _pool
     if _pool is None:
         url = DATABASE_URL
+
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        if url.startswith("postgresql://"):
-            url = url[len("postgresql://"):]
 
-        if '@' not in url:
-            raise ValueError("DATABASE_URL: no @ found")
+        # Парсим вручную БЕЗ бага Python 3.14
+        scheme_removed = url.replace("postgresql://", "", 1)
 
-        auth_part, host_part = url.rsplit('@', 1)
+        # auth@host
+        auth_part, host_part = scheme_removed.rsplit("@", 1)
 
-        if ':' in auth_part:
-            db_user, db_password = auth_part.split(':', 1)
-        else:
-            db_user = auth_part
-            db_password = ''
+        # user:password (rsplit — справа!)
+        db_user, db_password = auth_part.rsplit(":", 1)
 
-        db_user = unquote(db_user)
-        db_password = unquote(db_password)
-
-        if '/' in host_part:
-            host_port, db_part = host_part.split('/', 1)
-            database = db_part.split('?')[0]
+        # host/db
+        if "/" in host_part:
+            host_port, database = host_part.split("/", 1)
+            database = database.split("?")[0]
         else:
             host_port = host_part
-            database = 'postgres'
+            database = "postgres"
 
-        if ':' in host_port:
-            host, port_str = host_port.rsplit(':', 1)
-            port = int(port_str)
+        # host:port
+        if ":" in host_port:
+            host, port = host_port.rsplit(":", 1)
+            port = int(port)
         else:
             host = host_port
             port = 5432
 
-        print(f"🔌 DB: {db_user}@{host}:{port}/{database}")
+        print(f"🔌 DB USER: {db_user}")
+        print(f"🔌 DB HOST: {host}:{port}/{database}")
 
         _pool = await asyncpg.create_pool(
             user=db_user,
@@ -54,12 +50,13 @@ async def get_pool():
             host=host,
             port=port,
             database=database,
+            ssl="require",
             min_size=1,
             max_size=10,
             command_timeout=30,
             statement_cache_size=0,
-            ssl='require',
         )
+
     return _pool
 
 
@@ -560,7 +557,6 @@ async def search_messages_for_user(user_id, query):
         return result
 
 
-# === ADMIN ===
 async def get_all_users_with_stats():
     pool = await get_pool()
     async with pool.acquire() as conn:
