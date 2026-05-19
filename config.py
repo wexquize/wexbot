@@ -1,12 +1,7 @@
-BOT_TOKEN = "8673691254:AAF1TKhm8G31oGGPA3KvdZPttboVF2CoS8A"
+import os
 
-ADMIN_ID = 7643929600  # твой ID
-
-DB_PATH = "messages.db"
-
-FREE_DAYS = 3
-PREMIUM_DAYS = 30
-
-REFERRALS_FOR_PREMIUM = 5
-
-TRACKER_INTERVAL = 300
+BOT_TOKEN = os.getenv("8673691254:AAF1TKhm8G31oGGPA3KvdZPttboVF2CoS8A", "")
+ADMIN_ID = int(os.getenv("7643929600", "0"))
+REFERRALS_FOR_PREMIUM = 3
+MINIAPP_URL = "https://wexquize.github.io/wexbot/"
+API_PORT = int(os.getenv("PORT", "8080"))
