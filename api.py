@@ -34,33 +34,17 @@ _current_key_idx = 0
 routes = web.RouteTableDef()
 
 
-# =========================
-# AUTH
-# =========================
 def validate_init_data(init_data):
     try:
-        parsed = dict(
-            urllib.parse.parse_qsl(init_data, keep_blank_values=True)
-        )
+        parsed = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
         received_hash = parsed.pop("hash", None)
         if not received_hash:
             return None
 
-        data_check = "\n".join(
-            f"{k}={v}" for k, v in sorted(parsed.items())
-        )
+        data_check = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
 
-        secret = hmac.new(
-            b"WebAppData",
-            BOT_TOKEN.encode(),
-            hashlib.sha256
-        ).digest()
-
-        calc_hash = hmac.new(
-            secret,
-            data_check.encode(),
-            hashlib.sha256
-        ).hexdigest()
+        secret = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
+        calc_hash = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(calc_hash, received_hash):
             return None
@@ -89,9 +73,6 @@ def is_admin(request):
     return uid == ADMIN_ID if uid else False
 
 
-# =========================
-# AI
-# =========================
 SYSTEM_PROMPT = """Ты — wexquize AI, умный ассистент.
 Отвечай кратко, на русском.
 Используй markdown: **жирный**, *курсив*, `код`.
@@ -107,11 +88,14 @@ def get_next_key():
     return key
 
 
+# Актуальные модели на 2025
 MODELS = [
+    "gemini-2.5-flash-lite",
     "gemini-2.0-flash-lite",
+    "gemini-2.5-flash",
     "gemini-2.0-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
 ]
 
 
@@ -152,6 +136,8 @@ async def ask_gemini(message, history=None):
     if not GEMINI_API_KEYS:
         return "⚠️ AI не настроен"
 
+    print(f"🤖 AI: '{message[:50]}', ключей={len(GEMINI_API_KEYS)}")
+
     contents = [
         {"role": "user", "parts": [{"text": f"[SYSTEM]: {SYSTEM_PROMPT}"}]},
         {"role": "model", "parts": [{"text": "Готов помочь!"}]}
@@ -164,14 +150,15 @@ async def ask_gemini(message, history=None):
 
     contents.append({"role": "user", "parts": [{"text": message}]})
 
-    last_error = "unknown"
-    for _ in range(len(GEMINI_API_KEYS)):
+    errors = []
+    for ki in range(len(GEMINI_API_KEYS)):
         api_key = get_next_key()
         if not api_key:
             continue
 
         for model in MODELS:
             status, text = await call_gemini(api_key, model, contents)
+            print(f"🔍 {model} key#{ki}: status={status}")
 
             if status == 200:
                 try:
@@ -190,19 +177,16 @@ async def ask_gemini(message, history=None):
                     continue
 
             elif status == 429:
-                last_error = "лимит"
+                errors.append(f"{model}:limit")
                 continue
             elif status == 404:
                 continue
             else:
-                last_error = f"ошибка {status}"
+                errors.append(f"{model}:{status}")
 
-    return f"⚠️ AI недоступен ({last_error}). Попробуй через минуту."
+    return "⚠️ AI временно недоступен. Все ключи и модели исчерпали лимит.\nПодожди немного или добавь ещё ключи в настройки."
 
 
-# =========================
-# PUBLIC ROUTES
-# =========================
 @routes.get("/health")
 async def health(request):
     return web.json_response({"status": "ok", "ai_keys": len(GEMINI_API_KEYS)})
@@ -322,9 +306,6 @@ async def api_ai(request):
     return web.json_response({"reply": answer})
 
 
-# =========================
-# ADMIN ROUTES
-# =========================
 @routes.get("/api/admin/users")
 async def admin_users(request):
     if not is_admin(request):
@@ -352,9 +333,58 @@ async def admin_premium(request):
 
         if action == "give":
             await set_premium(uid, True, days=days)
+
+            # Уведомляем пользователя через бота
+            try:
+                from aiogram import Bot
+                bot = Bot(token=BOT_TOKEN)
+
+                if days == 0:
+                    text = (
+                        "⭐ <b>Тебе выдан БЕСКОНЕЧНЫЙ Premium!</b> ♾️\n\n"
+                        "Теперь доступны:\n"
+                        "📸 Удалённые фото\n"
+                        "🎥 Удалённые видео\n"
+                        "🎤 Удалённые голосовые\n"
+                        "📁 Удалённые файлы\n"
+                        "🎭 Удалённые стикеры\n"
+                        "📹 Удалённые кружки"
+                    )
+                else:
+                    text = (
+                        f"⭐ <b>Тебе выдан Premium на {days} дней!</b>\n\n"
+                        "Теперь доступны:\n"
+                        "📸 Удалённые фото\n"
+                        "🎥 Удалённые видео\n"
+                        "🎤 Удалённые голосовые\n"
+                        "📁 Удалённые файлы\n"
+                        "🎭 Удалённые стикеры\n"
+                        "📹 Удалённые кружки"
+                    )
+
+                await bot.send_message(uid, text, parse_mode="HTML")
+                await bot.session.close()
+            except Exception as e:
+                print(f"Notify err: {e}")
+
             return web.json_response({"ok": True, "action": "given", "days": days})
+
         elif action == "remove":
             await remove_premium(uid)
+
+            try:
+                from aiogram import Bot
+                bot = Bot(token=BOT_TOKEN)
+                await bot.send_message(
+                    uid,
+                    "❌ <b>Ваша Premium подписка отключена</b>\n\n"
+                    "Если считаете что произошла ошибка — напишите @wexquize",
+                    parse_mode="HTML"
+                )
+                await bot.session.close()
+            except Exception as e:
+                print(f"Notify err: {e}")
+
             return web.json_response({"ok": True, "action": "removed"})
         else:
             return web.json_response({"error": "Unknown action"}, status=400)
@@ -363,9 +393,6 @@ async def admin_premium(request):
         return web.json_response({"error": str(e)}, status=500)
 
 
-# =========================
-# APP
-# =========================
 async def create_app():
     app = web.Application()
     try:
