@@ -1,5 +1,6 @@
 from aiogram import Router
 from aiogram.types import Message, BusinessConnection, BusinessMessagesDeleted
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.filters import CommandStart, Command
 from database import (
     save_message,
@@ -20,6 +21,18 @@ from config import ADMIN_ID, REFERRALS_FOR_PREMIUM
 from datetime import datetime
 
 router = Router()
+
+MINIAPP_URL = "https://wexquize.github.io/wexbot/"
+
+
+def get_main_keyboard():
+    """Главная клавиатура с кнопкой Mini App"""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text="👁 Открыть в приложении",
+            web_app=WebAppInfo(url=MINIAPP_URL)
+        )
+    ]])
 
 
 @router.message(CommandStart())
@@ -47,10 +60,11 @@ async def cmd_start(message: Message):
                             parse_mode="HTML"
                         )
                     save_user(user_id, message.from_user.username or "", referred_by=referrer_id)
-        except:
-            pass
+        except Exception as e:
+            print(f"Ошибка реферала: {e}")
 
     save_user(user_id, message.from_user.username or "")
+    
     await message.answer(
         "👁 <b>wexquize mode — бот для сохранения удалённых сообщений</b>\n\n"
         "📱 <b>Инструкция по подключению:</b>\n\n"
@@ -65,7 +79,8 @@ async def cmd_start(message: Message):
         "• Редактирования отслеживаются\n"
         "• Если кто-то удалит сообщение — я пришлю тебе копию\n\n"
         "💎 Для изучения доступных тарифов введи команду /premium",
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=get_main_keyboard()  # 👈 Кнопка добавлена
     )
 
 
@@ -89,7 +104,6 @@ async def cmd_premium(message: Message):
     if message.from_user.id == ADMIN_ID:
         args = message.text.split()
         
-        # /premium USER_ID [DAYS] - выдать (0 = бесконечно)
         if len(args) >= 2 and args[1] != "remove":
             try:
                 uid = int(args[1])
@@ -97,7 +111,6 @@ async def cmd_premium(message: Message):
                 
                 set_premium(uid, True, days=days)
                 
-                # Уведомляем админа
                 if days == 0:
                     await message.answer(f"✅ Бесконечный Premium выдан пользователю {uid}")
                     premium_text = "бесконечный Premium"
@@ -105,7 +118,6 @@ async def cmd_premium(message: Message):
                     await message.answer(f"✅ Premium на {days} дней выдан пользователю {uid}")
                     premium_text = f"Premium на {days} дней"
                 
-                # Уведомляем пользователя
                 try:
                     await message.bot.send_message(
                         uid,
@@ -118,22 +130,19 @@ async def cmd_premium(message: Message):
                         f"🎭 Стикеры",
                         parse_mode="HTML"
                     )
-                except:
+                except Exception:
                     await message.answer("⚠️ Не удалось уведомить пользователя")
                     
             except ValueError:
                 await message.answer("❌ Неверный формат. Используй: /premium USER_ID [DAYS]")
         
-        # /premium remove USER_ID - отобрать
         elif len(args) == 3 and args[1] == "remove":
             try:
                 uid = int(args[2])
                 remove_premium(uid)
                 
-                # Уведомляем админа
                 await message.answer(f"✅ Premium отобран у пользователя {uid}")
                 
-                # Уведомляем пользователя
                 try:
                     await message.bot.send_message(
                         uid,
@@ -142,7 +151,7 @@ async def cmd_premium(message: Message):
                         "напишите владельцу бота: @wexquize",
                         parse_mode="HTML"
                     )
-                except:
+                except Exception:
                     await message.answer("⚠️ Не удалось уведомить пользователя")
                     
             except ValueError:
@@ -161,15 +170,23 @@ async def cmd_premium(message: Message):
         
         if premium_info and premium_info['active']:
             if premium_info.get('permanent'):
-                await message.answer("⭐ <b>У тебя бесконечный Premium!</b> ♾️", parse_mode="HTML")
+                await message.answer(
+                    "⭐ <b>У тебя бесконечный Premium!</b> ♾️",
+                    parse_mode="HTML",
+                    reply_markup=get_main_keyboard()
+                )
             elif premium_info['days_left'] is not None:
                 await message.answer(
                     f"⭐ <b>У тебя есть Premium!</b>\n\n"
                     f"📅 Осталось дней: {premium_info['days_left']}",
-                    parse_mode="HTML"
+                    parse_mode="HTML",
+                    reply_markup=get_main_keyboard()
                 )
             else:
-                await message.answer("⭐ У тебя есть Premium!")
+                await message.answer(
+                    "⭐ У тебя есть Premium!",
+                    reply_markup=get_main_keyboard()
+                )
         else:
             await message.answer(
                 "⭐ <b>wexquize mode Premium</b>\n\n"
@@ -188,7 +205,6 @@ async def cmd_premium(message: Message):
 
 @router.message(Command("users"))
 async def cmd_users(message: Message):
-    """Список всех пользователей (только для админа)"""
     if message.from_user.id != ADMIN_ID:
         await message.answer("❌ Эта команда только для администратора")
         return
@@ -213,7 +229,6 @@ async def cmd_users(message: Message):
     )
     
     for user_id, username, is_premium, connected_at, premium_until, referred_by in users:
-        # Статус
         if is_premium:
             if premium_until == "permanent":
                 status = "⭐ Premium ♾️"
@@ -222,34 +237,27 @@ async def cmd_users(message: Message):
                     until = datetime.fromisoformat(premium_until)
                     days_left = (until - datetime.now()).days
                     status = f"⭐ Premium ({days_left}д)"
-                except:
+                except Exception:
                     status = "⭐ Premium"
             else:
                 status = "⭐ Premium"
         else:
             status = "🆓 Free"
         
-        # Дата подключения
         try:
             connected = datetime.fromisoformat(connected_at)
             date_str = connected.strftime("%d.%m.%Y")
-        except:
+        except Exception:
             date_str = "?"
         
-        # Реферал
         if referred_by:
             referrer_name = get_username_by_id(referred_by)
             ref_info = f"@{referrer_name}" if referrer_name != "Unknown" else f"ID{referred_by}"
         else:
             ref_info = "—"
         
-        # Имя пользователя
-        if username:
-            display_name = f"@{username}"
-        else:
-            display_name = f"ID{user_id}"
+        display_name = f"@{username}" if username else f"ID{user_id}"
         
-        # Формируем строку
         user_line = (
             f"<b>{display_name}</b>\n"
             f"├ ID: <code>{user_id}</code>\n"
@@ -266,6 +274,16 @@ async def cmd_users(message: Message):
     
     if text:
         await message.answer(text, parse_mode="HTML")
+
+
+@router.message(Command("app"))
+async def cmd_app(message: Message):
+    await message.answer(
+        "👁 <b>wexquize mode App</b>\n\n"
+        "Статистика, история и ИИ — всё здесь.",
+        reply_markup=get_main_keyboard(),
+        parse_mode="HTML"
+    )
 
 
 @router.business_connection()
@@ -322,7 +340,6 @@ async def on_business_edit(message: Message):
         from_name = message.from_user.full_name if message.from_user else "Неизвестно"
         from_username = message.from_user.username if message.from_user else None
         
-        # Формируем имя для отображения (юзернейм или ID)
         if from_username:
             display_name = f"@{from_username}"
         else:
@@ -366,16 +383,12 @@ async def on_messages_deleted(event: BusinessMessagesDeleted):
 
                 _, _, chat_id, from_id, from_name, text, media_type, file_id, date, _ = row
 
-                # ПРОВЕРКА: не отправляем если владелец удалил свое сообщение
                 if from_id == owner_id:
                     print(f"⏭️ Пропуск: владелец удалил своё сообщение {msg_id}")
                     continue
 
-                # Получаем информацию о пользователе из базы
-                from database import get_username_by_id
                 username = get_username_by_id(from_id) if from_id else None
                 
-                # Формируем имя для отображения (юзернейм или кликабельный ID)
                 if username and username != "Unknown":
                     display_name = f"@{username}"
                 elif from_id:
@@ -435,21 +448,3 @@ async def on_messages_deleted(event: BusinessMessagesDeleted):
                 print(f"❌ Ошибка удаления {msg_id}: {e}")
     except Exception as e:
         print(f"❌ Ошибка deleted: {e}")
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-
-MINIAPP_URL = "https://wexquize.github.io/wexbot/"
-
-@router.message(Command("app"))
-async def cmd_app(message: Message):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(
-            text="👁 Открыть wexquize mode",
-            web_app=WebAppInfo(url=MINIAPP_URL)
-        )
-    ]])
-    await message.answer(
-        "👁 <b>wexquize mode App</b>\n\n"
-        "Статистика, история и ИИ — всё здесь.",
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
