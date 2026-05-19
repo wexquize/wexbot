@@ -114,7 +114,7 @@ async def call_gemini(api_key, model, contents):
     payload = {
         "contents": contents,
         "generationConfig": {
-            "temperature": 0.9,
+            "temperature": 0.3,
             "maxOutputTokens": 2048,
             "topP": 0.95,
             "topK": 40,
