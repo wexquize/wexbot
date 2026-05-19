@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>wexquize mode</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #1a1a24;
+    --card: #16161f;
+    --card2: #1e1e2a;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --accent: #7c5cfc;
+    --accent2: #a78bfa;
+    --accent3: #c4b5fd;
+    --red: #ff4d6a;
+    --green: #22d3a5;
+    --amber: #fbbf24;
+    --blue: #60a5fa;
+    --text: #f0eeff;
+    --text2: #9b97b8;
+    --text3: #5c5a72;
+    --premium: #f5c842;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-icon {
+    width: 34px;
+    height: 34px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .logo-text {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  .logo-sub {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.5px;
+  }
+  .premium-badge {
+    background: linear-gradient(135deg, #f5c842, #f59e0b);
+    color: #1a1000;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+  }
+
+  /* TABS */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 12px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tab.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .tab:not(.active):hover {
+    background: var(--bg3);
+    border-color: var(--border2);
+    color: var(--text);
+  }
+  .tab-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    display: none;
+  }
+  .tab.has-notif .tab-dot { display: block; }
+
+  /* PAGES */
+  .page { display: none; padding: 16px; }
+  .page.active { display: block; }
+
+  /* CARDS */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  /* STATS GRID */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    opacity: 0.08;
+    transform: translate(20px, -20px);
+  }
+  .stat-card.purple::before { background: var(--accent); }
+  .stat-card.red::before { background: var(--red); }
+  .stat-card.green::before { background: var(--green); }
+  .stat-card.blue::before { background: var(--blue); }
+  .stat-label {
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 6px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+  .stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+  .stat-card.purple .stat-value { color: var(--accent3); }
+  .stat-card.red .stat-value { color: var(--red); }
+  .stat-card.green .stat-value { color: var(--green); }
+  .stat-card.blue .stat-value { color: var(--blue); }
+  .stat-sub {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 4px;
+  }
+
+  /* MESSAGE ITEMS */
+  .msg-list { display: flex; flex-direction: column; gap: 8px; }
+  .msg-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .msg-item:active { transform: scale(0.98); background: var(--card2); }
+  .msg-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .msg-sender {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .avatar.p { background: rgba(124,92,252,0.25); color: var(--accent2); }
+  .avatar.r { background: rgba(255,77,106,0.2); color: var(--red); }
+  .avatar.g { background: rgba(34,211,165,0.2); color: var(--green); }
+  .avatar.b { background: rgba(96,165,250,0.2); color: var(--blue); }
+  .sender-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .msg-time {
+    font-size: 11px;
+    color: var(--text3);
+  }
+  .msg-text {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .msg-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    margin-top: 6px;
+  }
+  .badge-del { background: rgba(255,77,106,0.15); color: var(--red); }
+  .badge-edit { background: rgba(251,191,36,0.15); color: var(--amber); }
+  .badge-media { background: rgba(124,92,252,0.15); color: var(--accent2); }
+  .badge-lock { background: rgba(255,255,255,0.07); color: var(--text3); }
+
+  /* ACTIVITY CHART */
+  .chart-wrap {
+    position: relative;
+    height: 80px;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 0 4px;
+  }
+  .bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .bar {
+    width: 100%;
+    border-radius: 4px 4px 0 0;
+    background: var(--accent);
+    opacity: 0.7;
+    transition: height 0.6s cubic-bezier(.34,1.56,.64,1);
+    min-height: 3px;
+    cursor: pointer;
+  }
+  .bar:hover { opacity: 1; }
+  .bar-label {
+    font-size: 9px;
+    color: var(--text3);
+    margin-top: 4px;
+  }
+
+  /* AI SECTION */
+  .ai-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .ai-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+  }
+  .ai-btn:active { transform: scale(0.97); }
+  .ai-btn:hover { border-color: var(--accent); }
+  .ai-btn-icon {
+    font-size: 20px;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .ai-btn-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    display: block;
+    margin-bottom: 2px;
+  }
+  .ai-btn-sub {
+    font-size: 11px;
+    color: var(--text3);
+    display: block;
+  }
+  .ai-result {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+    min-height: 60px;
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+  .ai-result.visible { display: block; }
+  .ai-result .thinking {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--accent2);
+    font-size: 13px;
+  }
+  .dots span {
+    display: inline-block;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--accent2);
+    animation: bounce 1.4s infinite;
+    margin: 0 1px;
+  }
+  .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%,80%,100% { transform: translateY(0); opacity:0.4; }
+    40% { transform: translateY(-5px); opacity:1; }
+  }
+
+  /* PREMIUM PAGE */
+  .premium-hero {
+    background: linear-gradient(135deg, rgba(124,92,252,0.15), rgba(167,139,250,0.08));
+    border: 1px solid rgba(124,92,252,0.3);
+    border-radius: 20px;
+    padding: 24px 20px;
+    text-align: center;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .premium-hero::before {
+    content: '✦';
+    position: absolute;
+    top: -20px; right: -20px;
+    font-size: 100px;
+    opacity: 0.04;
+    color: var(--accent);
+  }
+  .premium-crown { font-size: 36px; margin-bottom: 8px; }
+  .premium-title {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+  }
+  .premium-desc {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.5;
+  }
+  .plans {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .plan-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .plan-card.featured {
+    border-color: var(--accent);
+    background: rgba(124,92,252,0.08);
+  }
+  .plan-card:active { transform: scale(0.99); }
+  .plan-popular {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 12px;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .plan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .plan-name { font-size: 15px; font-weight: 700; }
+  .plan-price { font-size: 18px; font-weight: 700; color: var(--accent2); }
+  .plan-per { font-size: 12px; color: var(--text3); font-weight: 400; }
+  .plan-features {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .plan-features li {
+    font-size: 12px;
+    color: var(--text2);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .plan-features li::before {
+    content: '✓';
+    color: var(--green);
+    font-weight: 700;
+    font-size: 11px;
+  }
+
+  /* REF PAGE */
+  .ref-progress {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .progress-title { font-size: 14px; font-weight: 600; }
+  .progress-count { font-size: 14px; font-weight: 700; color: var(--accent2); }
+  .progress-bar-wrap {
+    height: 8px;
+    background: var(--bg3);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    transition: width 1s cubic-bezier(.34,1.56,.64,1);
+  }
+  .progress-sub { font-size: 11px; color: var(--text3); }
+  .ref-link-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .ref-link-card:active { transform: scale(0.98); }
+  .ref-link-text {
+    flex: 1;
+    font-size: 12px;
+    color: var(--accent2);
+    word-break: break-all;
+    line-height: 1.4;
+    font-family: monospace;
+  }
+  .copy-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .copy-btn:active { transform: scale(0.95); }
+  .ref-friends {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .friend-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .friend-date { font-size: 11px; color: var(--text3); margin-left: auto; }
+
+  /* SETTINGS */
+  .settings-section { margin-bottom: 20px; }
+  .settings-label {
+    font-size: 11px;
+    color: var(--text3);
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding: 0 4px;
+  }
+  .setting-row {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .setting-row:active { background: var(--card2); }
+  .setting-left { display: flex; align-items: center; gap: 12px; }
+  .setting-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .si-purple { background: rgba(124,92,252,0.2); }
+  .si-red { background: rgba(255,77,106,0.15); }
+  .si-green { background: rgba(34,211,165,0.15); }
+  .si-amber { background: rgba(251,191,36,0.15); }
+  .si-blue { background: rgba(96,165,250,0.15); }
+  .setting-name { font-size: 14px; font-weight: 500; }
+  .setting-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
+  .toggle {
+    width: 44px;
+    height: 26px;
+    background: var(--bg3);
+    border-radius: 13px;
+    position: relative;
+    transition: background 0.3s;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.3s cubic-bezier(.34,1.56,.64,1);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .toggle.on::after { transform: translateX(18px); }
+  .arrow-right {
+    color: var(--text3);
+    font-size: 16px;
+  }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--accent);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 1000;
+    transition: transform 0.3s cubic-bezier(.34,1.56,.64,1);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* BOTTOM NAV */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0; right: 0;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    display: flex;
+    padding: 8px 0 env(safe-area-inset-bottom, 8px);
+    z-index: 100;
+  }
+  .nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    padding: 6px 0;
+    transition: all 0.2s;
+  }
+  .nav-icon {
+    font-size: 20px;
+    color: var(--text3);
+    transition: all 0.2s;
+    position: relative;
+  }
+  .nav-label {
+    font-size: 10px;
+    color: var(--text3);
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+  .nav-item.active .nav-icon,
+  .nav-item.active .nav-label {
+    color: var(--accent2);
+  }
+  .nav-badge {
+    position: absolute;
+    top: -4px;
+    right: -8px;
+    background: var(--red);
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 8px;
+    min-width: 16px;
+    text-align: center;
+  }
+
+  .content-wrap {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .section-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 16px 0;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text3);
+    font-size: 13px;
+  }
+  .empty-state .big { font-size: 40px; margin-bottom: 10px; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+    margin-bottom: 8px;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--text3); }
+
+  .action-btn {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 14px;
+    padding: 14px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.2px;
+  }
+  .action-btn:active { transform: scale(0.98); opacity: 0.9; }
+
+  .shimmer {
+    background: linear-gradient(90deg, var(--card) 25%, var(--card2) 50%, var(--card) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 8px;
+    height: 14px;
+    margin-bottom: 6px;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">👁</div>
+    <div>
+      <div class="logo-text">wexquize mode</div>
+      <div class="logo-sub">BUSINESS BOT</div>
+    </div>
+  </div>
+  <div id="premiumBadge" class="premium-badge" style="display:none">⭐ PREMIUM</div>
+</div>
+
+<!-- TABS (scroll on desktop, hidden on mobile — uses bottom nav) -->
+<div class="tabs" id="tabsBar" style="display:none">
+  <div class="tab active" onclick="switchPage('home',this)">🏠 Главная</div>
+  <div class="tab has-notif" onclick="switchPage('messages',this)">🗑 Удалённые <span class="tab-dot"></span></div>
+  <div class="tab" onclick="switchPage('ai',this)">🤖 ИИ</div>
+  <div class="tab" onclick="switchPage('premium',this)">💎 Premium</div>
+  <div class="tab" onclick="switchPage('ref',this)">🎁 Рефералы</div>
+  <div class="tab" onclick="switchPage('settings',this)">⚙️ Настройки</div>
+</div>
+
+<div class="content-wrap">
+
+  <!-- ───── HOME ───── -->
+  <div id="page-home" class="page active">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;padding-top:4px">
+      <div>
+        <div style="font-size:18px;font-weight:700;letter-spacing:-0.5px" id="greetName">Добро пожаловать 👋</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Все данные за последние 30 дней</div>
+      </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="stats-grid">
+      <div class="stat-card purple">
+        <div class="stat-label">УДАЛЕНО</div>
+        <div class="stat-value" id="statDeleted">—</div>
+        <div class="stat-sub">сообщений</div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-label">РЕДАКТИРОВАНО</div>
+        <div class="stat-value" id="statEdited">—</div>
+        <div class="stat-sub">изменений</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">РЕФЕРАЛОВ</div>
+        <div class="stat-value" id="statRefs">—</div>
+        <div class="stat-sub">приглашено</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">ДНЕЙ PREMIUM</div>
+        <div class="stat-value" id="statDays">—</div>
+        <div class="stat-sub">осталось</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Активность за неделю</span>
+        <span style="font-size:11px;color:var(--text3)" id="totalWeek">0 событий</span>
+      </div>
+      <div class="chart-wrap" id="activityChart"></div>
+      <div style="display:flex;justify-content:space-around;margin-top:6px">
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)">
+          <div style="width:8px;height:8px;border-radius:2px;background:var(--accent);opacity:0.7"></div>удалённые
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)">
+          <div style="width:8px;height:8px;border-radius:2px;background:var(--amber);opacity:0.7"></div>редактирования
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Последние события</span>
+        <span style="font-size:12px;color:var(--accent2);cursor:pointer" onclick="switchPageByName('messages')">Все →</span>
+      </div>
+      <div id="recentEvents" class="msg-list">
+        <div style="padding:10px 0;text-align:center;color:var(--text3);font-size:13px">Загрузка...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── MESSAGES ───── -->
+  <div id="page-messages" class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-top:4px">
+      <div style="font-size:16px;font-weight:700">Удалённые сообщения</div>
+      <div style="display:flex;gap:6px">
+        <div id="filterAll" onclick="filterMsgs('all')" style="padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;font-weight:500;background:var(--accent);color:white">Все</div>
+        <div id="filterDel" onclick="filterMsgs('del')" style="padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;font-weight:500;background:var(--card);color:var(--text2);border:1px solid var(--border)">🗑</div>
+        <div id="filterEdit" onclick="filterMsgs('edit')" style="padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;font-weight:500;background:var(--card);color:var(--text2);border:1px solid var(--border)">✏️</div>
+      </div>
+    </div>
+    <div id="msgList" class="msg-list"></div>
+  </div>
+
+  <!-- ───── AI ───── -->
+  <div id="page-ai" class="page">
+    <div style="padding-top:4px;margin-bottom:12px">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">ИИ-ассистент</div>
+      <div style="font-size:12px;color:var(--text3)">Powered by Claude</div>
+    </div>
+
+    <div class="ai-buttons">
+      <div class="ai-btn" onclick="triggerAI('summary')">
+        <span class="ai-btn-icon">📋</span>
+        <span class="ai-btn-title">Резюме</span>
+        <span class="ai-btn-sub">Пересказ чата</span>
+      </div>
+      <div class="ai-btn" onclick="triggerAI('tone')">
+        <span class="ai-btn-icon">🔍</span>
+        <span class="ai-btn-title">Тон общения</span>
+        <span class="ai-btn-sub">Анализ человека</span>
+      </div>
+      <div class="ai-btn" onclick="triggerAI('reply')">
+        <span class="ai-btn-icon">💬</span>
+        <span class="ai-btn-title">Помощь</span>
+        <span class="ai-btn-sub">Написать ответ</span>
+      </div>
+      <div class="ai-btn" onclick="triggerAI('ghost')">
+        <span class="ai-btn-icon">👻</span>
+        <span class="ai-btn-title">Детектор лжи</span>
+        <span class="ai-btn-sub">Паттерны удалений</span>
+      </div>
+    </div>
+
+    <div id="aiInputBlock" style="display:none;margin-bottom:8px">
+      <input type="text" id="aiInput" placeholder="Введи запрос...">
+      <button class="action-btn" onclick="runAI()">Запустить ИИ ✨</button>
+    </div>
+
+    <div id="aiResult" class="ai-result"></div>
+
+    <div class="section-divider"></div>
+
+    <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:8px">История запросов</div>
+    <div id="aiHistory">
+      <div class="empty-state">
+        <div class="big">🤖</div>
+        Запросы появятся здесь
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── PREMIUM ───── -->
+  <div id="page-premium" class="page">
+    <div class="premium-hero">
+      <div class="premium-crown">💎</div>
+      <div class="premium-title">wexquize Premium</div>
+      <div class="premium-desc" style="margin-top:6px">Полный доступ к медиа, ИИ-функциям<br>и расширенной истории сообщений</div>
+    </div>
+
+    <div class="plans">
+      <div class="plan-card" onclick="buyPlan('week')">
+        <div class="plan-header">
+          <span class="plan-name">Неделя</span>
+          <span class="plan-price">149₽ <span class="plan-per">/ 7 дней</span></span>
+        </div>
+        <ul class="plan-features">
+          <li>Фото, видео, голосовые</li>
+          <li>История 7 дней</li>
+          <li>ИИ-функции</li>
+        </ul>
+      </div>
+      <div class="plan-card featured" style="padding-top:24px" onclick="buyPlan('month')">
+        <div class="plan-popular">ПОПУЛЯРНОЕ</div>
+        <div class="plan-header">
+          <span class="plan-name">Месяц</span>
+          <span class="plan-price">399₽ <span class="plan-per">/ 30 дней</span></span>
+        </div>
+        <ul class="plan-features">
+          <li>Всё из базового</li>
+          <li>История 30 дней</li>
+          <li>ИИ без ограничений</li>
+          <li>Приоритетная поддержка</li>
+        </ul>
+      </div>
+      <div class="plan-card" onclick="buyPlan('forever')">
+        <div class="plan-header">
+          <span class="plan-name">Навсегда ♾️</span>
+          <span class="plan-price">1490₽ <span class="plan-per">единоразово</span></span>
+        </div>
+        <ul class="plan-features">
+          <li>Всё включено навсегда</li>
+          <li>Неограниченная история</li>
+          <li>Ранний доступ к новым функциям</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="background:rgba(34,211,165,0.08);border:1px solid rgba(34,211,165,0.2);border-radius:14px;padding:14px;display:flex;gap:12px;align-items:center;margin-bottom:12px">
+      <span style="font-size:24px">🎁</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:2px">Бесплатный Premium</div>
+        <div style="font-size:12px;color:var(--text2)">Пригласи 5 друзей и получи 30 дней бесплатно!</div>
+      </div>
+      <div style="margin-left:auto;font-size:18px;cursor:pointer" onclick="switchPageByName('ref')">→</div>
+    </div>
+  </div>
+
+  <!-- ───── REF ───── -->
+  <div id="page-ref" class="page">
+    <div style="padding-top:4px;margin-bottom:14px">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">Рефералы</div>
+      <div style="font-size:12px;color:var(--text3)">Пригласи 5 друзей — получи Premium на 30 дней</div>
+    </div>
+
+    <div class="ref-progress">
+      <div class="progress-header">
+        <span class="progress-title">Прогресс</span>
+        <span class="progress-count"><span id="refCurrent">0</span>/5</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="refProgressBar" style="width:0%"></div>
+      </div>
+      <div class="progress-sub" id="refProgressSub">Ещё 5 рефералов до Premium!</div>
+    </div>
+
+    <div style="font-size:12px;color:var(--text3);font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:8px">Твоя ссылка</div>
+    <div class="ref-link-card" onclick="copyRefLink()">
+      <div class="ref-link-text" id="refLinkText">Загружаем ссылку...</div>
+      <button class="copy-btn" id="copyBtn">Копировать</button>
+    </div>
+
+    <div style="font-size:12px;color:var(--text3);font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:8px">Приглашённые</div>
+    <div class="ref-friends" id="refFriends">
+      <div class="empty-state">
+        <div class="big">👥</div>
+        Рефералов пока нет
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── SETTINGS ───── -->
+  <div id="page-settings" class="page">
+    <div style="padding-top:4px;margin-bottom:16px">
+      <div style="font-size:16px;font-weight:700">Настройки</div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Уведомления</div>
+      <div class="setting-row" onclick="toggleSetting(this)">
+        <div class="setting-left">
+          <div class="setting-icon si-purple">🗑</div>
+          <div>
+            <div class="setting-name">Удалённые сообщения</div>
+            <div class="setting-sub">Уведомлять при удалении</div>
+          </div>
+        </div>
+        <div class="toggle on" data-key="notif_deleted"></div>
+      </div>
+      <div class="setting-row" onclick="toggleSetting(this)">
+        <div class="setting-left">
+          <div class="setting-icon si-amber">✏️</div>
+          <div>
+            <div class="setting-name">Редактирования</div>
+            <div class="setting-sub">Показывать что изменили</div>
+          </div>
+        </div>
+        <div class="toggle on" data-key="notif_edit"></div>
+      </div>
+      <div class="setting-row" onclick="toggleSetting(this)">
+        <div class="setting-left">
+          <div class="setting-icon si-blue">📸</div>
+          <div>
+            <div class="setting-name">Медиа сообщения</div>
+            <div class="setting-sub">Фото, видео, голосовые</div>
+          </div>
+        </div>
+        <div class="toggle" data-key="notif_media"></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Приватность</div>
+      <div class="setting-row" onclick="toggleSetting(this)">
+        <div class="setting-left">
+          <div class="setting-icon si-green">👻</div>
+          <div>
+            <div class="setting-name">Режим невидимки</div>
+            <div class="setting-sub">Не сохранять свои удаления</div>
+          </div>
+        </div>
+        <div class="toggle on" data-key="ghost_mode"></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Аккаунт</div>
+      <div class="setting-row" onclick="openSupport()">
+        <div class="setting-left">
+          <div class="setting-icon si-purple">💬</div>
+          <div>
+            <div class="setting-name">Поддержка</div>
+            <div class="setting-sub">@wexquize</div>
+          </div>
+        </div>
+        <div class="arrow-right">›</div>
+      </div>
+      <div class="setting-row" onclick="clearHistory()">
+        <div class="setting-left">
+          <div class="setting-icon si-red">🗑</div>
+          <div>
+            <div class="setting-name" style="color:var(--red)">Очистить историю</div>
+            <div class="setting-sub">Удалить все сохранённые данные</div>
+          </div>
+        </div>
+        <div class="arrow-right">›</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:20px;color:var(--text3);font-size:12px">
+      wexquize mode v2.0<br>Сделано с 💜
+    </div>
+  </div>
+
+</div><!-- end content-wrap -->
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav">
+  <div class="nav-item active" onclick="switchPage('home',null,'nav-home')" id="nav-home">
+    <div class="nav-icon">🏠</div>
+    <div class="nav-label">Главная</div>
+  </div>
+  <div class="nav-item" onclick="switchPage('messages',null,'nav-messages')" id="nav-messages">
+    <div class="nav-icon">🗑<span class="nav-badge" id="navBadge">3</span></div>
+    <div class="nav-label">Удалённые</div>
+  </div>
+  <div class="nav-item" onclick="switchPage('ai',null,'nav-ai')" id="nav-ai">
+    <div class="nav-icon">🤖</div>
+    <div class="nav-label">ИИ</div>
+  </div>
+  <div class="nav-item" onclick="switchPage('premium',null,'nav-premium')" id="nav-premium">
+    <div class="nav-icon">💎</div>
+    <div class="nav-label">Premium</div>
+  </div>
+  <div class="nav-item" onclick="switchPage('settings',null,'nav-settings')" id="nav-settings">
+    <div class="nav-icon">⚙️</div>
+    <div class="nav-label">Настройки</div>
+  </div>
+</div>
+
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const userId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user
+  ? tg.initDataUnsafe.user.id : null;
+const userName = tg && tg.initDataUnsafe && tg.initDataUnsafe.user
+  ? (tg.initDataUnsafe.user.first_name || 'Пользователь') : 'Гость';
+
+document.getElementById('greetName').textContent = `Привет, ${userName} 👋`;
+
+const DEMO_DATA = {
+  stats: { deleted: 47, edited: 12, refs: 2, days: 18 },
+  isPremium: true,
+  refLink: `https://t.me/wexquize_bot?start=ref_${userId || '123456'}`,
+  refCount: 2,
+  refFriends: [
+    { name: 'Алексей К.', date: '15 мая' },
+    { name: 'Мария О.', date: '10 мая' },
+  ],
+  messages: [
+    { id:1, type:'del', sender:'Никита', avatar:'Н', avClass:'p', text:'Ладно удаляю это сообщение лол', time:'Сегодня 14:23', mediaType:null },
+    { id:2, type:'edit', sender:'@marina_ok', avatar:'М', avClass:'g', text:'Было: "приду в 6" → Стало: "приду в 7"', time:'Сегодня 13:10', mediaType:null },
+    { id:3, type:'del', sender:'Дима', avatar:'Д', avClass:'r', text:'[Фото]', time:'Вчера 22:45', mediaType:'photo', isPremiumContent: true },
+    { id:4, type:'del', sender:'Артём', avatar:'А', avClass:'b', text:'Забудь про это', time:'Вчера 18:00', mediaType:null },
+    { id:5, type:'edit', sender:'@katya_s', avatar:'К', avClass:'p', text:'Было: "не смогу" → Стало: "попробую"', time:'18 мая 11:30', mediaType:null },
+    { id:6, type:'del', sender:'Влад', avatar:'В', avClass:'g', text:'Голосовое 0:23', time:'17 мая 09:15', mediaType:'voice', isPremiumContent: false },
+  ],
+  weekData: [
+    { day:'Пн', del:3, edit:1 },
+    { day:'Вт', del:7, edit:4 },
+    { day:'Ср', del:2, edit:0 },
+    { day:'Чт', del:9, edit:3 },
+    { day:'Пт', del:5, edit:2 },
+    { day:'Сб', del:12, edit:1 },
+    { day:'Вс', del:9, edit:1 },
+  ]
+};
+
+function initApp() {
+  const d = DEMO_DATA;
+
+  document.getElementById('statDeleted').textContent = d.stats.deleted;
+  document.getElementById('statEdited').textContent = d.stats.edited;
+  document.getElementById('statRefs').textContent = d.stats.refs;
+  document.getElementById('statDays').textContent = d.isPremium ? d.stats.days : '—';
+
+  if (d.isPremium) document.getElementById('premiumBadge').style.display = 'block';
+
+  buildChart(d.weekData);
+  buildRecentEvents(d.messages.slice(0,3));
+  buildMsgList(d.messages);
+  buildRefSection(d);
+
+  const totalWeek = d.weekData.reduce((s,r)=>s+r.del+r.edit,0);
+  document.getElementById('totalWeek').textContent = totalWeek + ' событий';
+  document.getElementById('navBadge').textContent = d.messages.filter(m=>m.type==='del').length;
+}
+
+function buildChart(data) {
+  const wrap = document.getElementById('activityChart');
+  const maxVal = Math.max(...data.map(d => d.del + d.edit), 1);
+  wrap.innerHTML = '';
+  data.forEach(d => {
+    const col = document.createElement('div');
+    col.className = 'bar-col';
+    const totalH = ((d.del + d.edit) / maxVal * 70);
+    const delH = (d.del / (d.del + d.edit || 1)) * totalH;
+    const editH = totalH - delH;
+    col.innerHTML = `
+      <div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:70px;gap:2px">
+        ${editH > 0 ? `<div style="width:80%;height:${editH}px;border-radius:3px 3px 0 0;background:var(--amber);opacity:0.7;min-height:2px"></div>` : ''}
+        <div style="width:80%;height:${Math.max(delH,3)}px;border-radius:${editH>0?'0':'3px 3px'} 0 0;background:var(--accent);opacity:0.7;min-height:3px"></div>
+      </div>
+      <div class="bar-label">${d.day}</div>`;
+    wrap.appendChild(col);
+  });
+}
+
+function buildRecentEvents(msgs) {
+  const el = document.getElementById('recentEvents');
+  el.innerHTML = '';
+  msgs.forEach(m => {
+    el.appendChild(createMsgItem(m));
+  });
+}
+
+function buildMsgList(msgs, filter='all') {
+  const el = document.getElementById('msgList');
+  el.innerHTML = '';
+  const filtered = filter === 'all' ? msgs : msgs.filter(m => m.type === filter);
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty-state"><div class="big">🧹</div>Ничего нет</div>';
+    return;
+  }
+  filtered.forEach(m => el.appendChild(createMsgItem(m)));
+}
+
+function createMsgItem(m) {
+  const div = document.createElement('div');
+  div.className = 'msg-item';
+  const badgeHtml = m.type === 'del'
+    ? '<span class="msg-type-badge badge-del">🗑 Удалено</span>'
+    : '<span class="msg-type-badge badge-edit">✏️ Изменено</span>';
+  const lockedHtml = m.mediaType && !DEMO_DATA.isPremium
+    ? '<span class="msg-type-badge badge-lock">🔒 Premium</span>' : '';
+  div.innerHTML = `
+    <div class="msg-item-top">
+      <div class="msg-sender">
+        <div class="avatar ${m.avClass}">${m.avatar}</div>
+        <span class="sender-name">${m.sender}</span>
+      </div>
+      <span class="msg-time">${m.time}</span>
+    </div>
+    <div class="msg-text">${m.text}</div>
+    <div>${badgeHtml}${lockedHtml}</div>`;
+  return div;
+}
+
+function buildRefSection(d) {
+  document.getElementById('refLinkText').textContent = d.refLink;
+  document.getElementById('refCurrent').textContent = d.refCount;
+  const pct = Math.min((d.refCount / 5) * 100, 100);
+  setTimeout(() => {
+    document.getElementById('refProgressBar').style.width = pct + '%';
+  }, 300);
+  const left = Math.max(5 - d.refCount, 0);
+  document.getElementById('refProgressSub').textContent =
+    left > 0 ? `Ещё ${left} ${plural(left,'реферал','реферала','рефералов')} до Premium!` : '🎉 Достигнуто! Premium активирован';
+
+  const el = document.getElementById('refFriends');
+  if (!d.refFriends.length) return;
+  el.innerHTML = '';
+  d.refFriends.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'friend-item';
+    div.innerHTML = `
+      <div class="avatar p">${f.name[0]}</div>
+      <span style="font-size:13px;font-weight:500">${f.name}</span>
+      <span class="friend-date">${f.date}</span>`;
+    el.appendChild(div);
+  });
+}
+
+function plural(n, one, two, five) {
+  const v = Math.abs(n) % 100;
+  const v1 = v % 10;
+  if (v > 10 && v < 20) return five;
+  if (v1 > 1 && v1 < 5) return two;
+  if (v1 === 1) return one;
+  return five;
+}
+
+let currentFilter = 'all';
+function filterMsgs(f) {
+  currentFilter = f;
+  ['all','del','edit'].forEach(id => {
+    const el = document.getElementById('filter' + id.charAt(0).toUpperCase() + id.slice(1));
+    if (id === f) {
+      el.style.background = 'var(--accent)';
+      el.style.color = 'white';
+      el.style.border = 'none';
+    } else {
+      el.style.background = 'var(--card)';
+      el.style.color = 'var(--text2)';
+      el.style.border = '1px solid var(--border)';
+    }
+  });
+  buildMsgList(DEMO_DATA.messages, f);
+}
+
+let currentAI = null;
+const aiPlaceholders = {
+  summary: 'Сколько сообщений проанализировать? (напр.: 30)',
+  tone: 'Имя или @username для анализа',
+  reply: 'Опиши ситуацию...',
+  ghost: 'Имя человека для проверки'
+};
+const aiLabels = { summary:'📋 Резюме', tone:'🔍 Тон', reply:'💬 Ответ', ghost:'👻 Детектор' };
+
+function triggerAI(type) {
+  if (!DEMO_DATA.isPremium) {
+    showToast('💎 Только для Premium');
+    switchPageByName('premium');
+    return;
+  }
+  currentAI = type;
+  const block = document.getElementById('aiInputBlock');
+  const input = document.getElementById('aiInput');
+  input.placeholder = aiPlaceholders[type] || 'Запрос...';
+  input.value = '';
+  block.style.display = 'block';
+  input.focus();
+  document.getElementById('aiResult').classList.remove('visible');
+}
+
+const aiHistory = [];
+
+async function runAI() {
+  const input = document.getElementById('aiInput').value.trim();
+  if (!input) { showToast('Введи запрос'); return; }
+
+  const result = document.getElementById('aiResult');
+  result.innerHTML = `<div class="thinking">ИИ думает <div class="dots"><span></span><span></span><span></span></div></div>`;
+  result.classList.add('visible');
+
+  try {
+    const systemMap = {
+      summary: 'Ты помощник бота для анализа переписок. Пользователь хочет резюме переписки. Отвечай кратко по-русски.',
+      tone: 'Ты психолог-аналитик. Дай краткий анализ тона общения человека в переписке. По-русски, 3-5 предложений.',
+      reply: 'Ты помогаешь писать сообщения. Предложи 2-3 варианта: мягкий, прямой, с юмором. По-русски.',
+      ghost: 'Ты анализируешь паттерны удалений в переписках. Дай честный анализ. По-русски.'
+    };
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 600,
+        system: systemMap[currentAI] || 'Помогай пользователю. Отвечай по-русски.',
+        messages: [{ role: 'user', content: input }]
+      })
+    });
+    const data = await resp.json();
+    const text = data.content && data.content[0] ? data.content[0].text : '⚠️ Нет ответа';
+    result.innerHTML = text.replace(/\n/g, '<br>');
+
+    aiHistory.unshift({ type: currentAI, query: input, answer: text, time: new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) });
+    renderAIHistory();
+  } catch(e) {
+    result.innerHTML = '⚠️ Ошибка соединения. Проверь подключение.';
+  }
+}
+
+function renderAIHistory() {
+  const el = document.getElementById('aiHistory');
+  if (!aiHistory.length) return;
+  el.innerHTML = '';
+  aiHistory.slice(0,5).forEach(h => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.style.cursor = 'pointer';
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:600;color:var(--accent2)">${aiLabels[h.type]}</span>
+        <span style="font-size:11px;color:var(--text3)">${h.time}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-style:italic">"${h.query}"</div>
+      <div style="font-size:13px;color:var(--text);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${h.answer.replace(/\n/g,'<br>')}</div>`;
+    el.appendChild(div);
+  });
+}
+
+function copyRefLink() {
+  const link = DEMO_DATA.refLink;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(link).then(() => showToast('✅ Ссылка скопирована!'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = link;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('✅ Скопировано!');
+  }
+  const btn = document.getElementById('copyBtn');
+  btn.textContent = '✓ Готово';
+  setTimeout(() => btn.textContent = 'Копировать', 2000);
+}
+
+function buyPlan(plan) {
+  const names = { week:'Неделя — 149₽', month:'Месяц — 399₽', forever:'Навсегда — 1490₽' };
+  showToast(`Открываю оплату: ${names[plan]}`);
+  if (tg) tg.openLink('https://t.me/wexquize');
+  else window.open('https://t.me/wexquize');
+}
+
+function openSupport() {
+  if (tg) tg.openLink('https://t.me/wexquize');
+  else window.open('https://t.me/wexquize');
+}
+
+function clearHistory() {
+  showToast('🗑 История очищена');
+}
+
+function toggleSetting(row) {
+  const toggle = row.querySelector('.toggle');
+  toggle.classList.toggle('on');
+  const key = toggle.dataset.key;
+  const val = toggle.classList.contains('on');
+  showToast(val ? '✅ Включено' : '⭕ Выключено');
+}
+
+let currentPage = 'home';
+function switchPage(name, tabEl, navId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (navId) document.getElementById(navId).classList.add('active');
+  currentPage = name;
+}
+function switchPageByName(name) {
+  const navMap = { home:'nav-home', messages:'nav-messages', ai:'nav-ai', premium:'nav-premium', settings:'nav-settings', ref:null };
+  switchPage(name, null, navMap[name]);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+initApp();
+</script>
+</body>
+</html>
