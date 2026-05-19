@@ -5,19 +5,31 @@ from datetime import datetime, timedelta
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
-# Глобальный пул соединений
 _pool = None
 
 
 async def get_pool():
     global _pool
     if _pool is None:
+        from urllib.parse import urlparse, unquote
+
+        url = DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+
+        parsed = urlparse(url)
+
         _pool = await asyncpg.create_pool(
-            DATABASE_URL,
+            user=unquote(parsed.username) if parsed.username else None,
+            password=unquote(parsed.password) if parsed.password else None,
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            database=parsed.path.lstrip('/') if parsed.path else 'postgres',
             min_size=1,
             max_size=10,
             command_timeout=30,
-            statement_cache_size=0,  # для pgbouncer
+            statement_cache_size=0,
+            ssl='require',
         )
     return _pool
 
@@ -90,7 +102,6 @@ async def init_db():
             )
         ''')
 
-        # Индексы
         await conn.execute('CREATE INDEX IF NOT EXISTS idx_msg_conn ON messages(business_connection_id)')
         await conn.execute('CREATE INDEX IF NOT EXISTS idx_msg_chat ON messages(chat_id, business_connection_id)')
         await conn.execute('CREATE INDEX IF NOT EXISTS idx_msg_deleted ON messages(is_deleted, business_connection_id)')
@@ -334,7 +345,6 @@ async def save_message(message, business_connection_id):
                 datetime.now().isoformat(), business_connection_id
             )
 
-        # Сохраняем username
         if message.from_user:
             username = message.from_user.username or ""
             if username or from_id:
@@ -659,8 +669,8 @@ async def search_messages_for_user(user_id, query):
                 'from_id': r['from_id'],
                 'from_name': display,
                 'text': r['text'],
+                'media_type': r['media_type'],
                 'date': r['date'],
-                'is_deleted': bool(r['is_deleted']),
-                'media_type': r['media_type']
+                'is_deleted': bool(r['is_deleted'])
             })
         return result
