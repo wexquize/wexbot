@@ -44,23 +44,34 @@ async def cmd_start(message: Message):
         try:
             referrer_id = int(message.text.split("ref_")[1])
             if referrer_id != user_id:
-                if add_referral(referrer_id, user_id):
-                    ref_count = get_referral_count(referrer_id)
-                    await message.bot.send_message(
-                        referrer_id,
-                        f"🎉 Новый реферал!\n"
-                        f"👤 {message.from_user.full_name}\n"
-                        f"📊 {ref_count}/{REFERRALS_FOR_PREMIUM}",
-                        parse_mode="HTML"
-                    )
-                    if ref_count >= REFERRALS_FOR_PREMIUM and not is_premium_user(referrer_id):
-                        set_premium(referrer_id, True, days=30)
+                added = await add_referral(referrer_id, user_id)
+                if added:
+                    ref_count = await get_referral_count(referrer_id)
+                    try:
                         await message.bot.send_message(
                             referrer_id,
-                            "⭐ <b>Premium на 30 дней получен бесплатно!</b>",
+                            f"🎉 Новый реферал!\n"
+                            f"👤 {message.from_user.full_name}\n"
+                            f"📊 {ref_count}/{REFERRALS_FOR_PREMIUM}",
                             parse_mode="HTML"
                         )
-                    save_user(
+                    except Exception:
+                        pass
+
+                    if ref_count >= REFERRALS_FOR_PREMIUM:
+                        is_prem = await is_premium_user(referrer_id)
+                        if not is_prem:
+                            await set_premium(referrer_id, True, days=30)
+                            try:
+                                await message.bot.send_message(
+                                    referrer_id,
+                                    "⭐ <b>Premium на 30 дней получен бесплатно!</b>",
+                                    parse_mode="HTML"
+                                )
+                            except Exception:
+                                pass
+
+                    await save_user(
                         user_id,
                         message.from_user.username or "",
                         referred_by=referrer_id
@@ -68,13 +79,13 @@ async def cmd_start(message: Message):
         except Exception as e:
             print(f"Ref error: {e}")
 
-    save_user(user_id, message.from_user.username or "")
+    await save_user(user_id, message.from_user.username or "")
 
     await message.answer(
         "👁 <b>wexquize mode</b>\n\n"
         "Бот сохраняет удалённые и изменённые сообщения.\n\n"
         "📱 <b>Подключение:</b>\n"
-        "Настройки → Автоматизация чатов → Добавить бота\n\n"
+        "Настройки → Telegram Business → Чат-боты\n\n"
         "Всё управление — в приложении 👇",
         parse_mode="HTML",
         reply_markup=app_keyboard()
@@ -93,7 +104,7 @@ async def cmd_app(message: Message):
 @router.message(Command("ref"))
 async def cmd_ref(message: Message):
     user_id = message.from_user.id
-    ref_count = get_referral_count(user_id)
+    ref_count = await get_referral_count(user_id)
     bot_me = await message.bot.me()
     ref_link = f"https://t.me/{bot_me.username}?start=ref_{user_id}"
     await message.answer(
@@ -106,7 +117,7 @@ async def cmd_ref(message: Message):
 
 
 # =========================
-# ADMIN COMMANDS
+# ADMIN
 # =========================
 @router.message(Command("premium"))
 async def cmd_premium_admin(message: Message):
@@ -123,13 +134,13 @@ async def cmd_premium_admin(message: Message):
         try:
             uid = int(args[1])
             days = int(args[2]) if len(args) >= 3 else 30
-            set_premium(uid, True, days=days)
+            await set_premium(uid, True, days=days)
             label = "♾️" if days == 0 else f"{days}д"
             await message.answer(f"✅ Premium {label} → {uid}")
             try:
                 await message.bot.send_message(
                     uid,
-                    f"⭐ <b>Тебе выдан Premium!</b>",
+                    "⭐ <b>Тебе выдан Premium!</b>",
                     parse_mode="HTML"
                 )
             except Exception:
@@ -140,7 +151,7 @@ async def cmd_premium_admin(message: Message):
     elif len(args) == 3 and args[1] == "remove":
         try:
             uid = int(args[2])
-            remove_premium(uid)
+            await remove_premium(uid)
             await message.answer(f"✅ Premium убран у {uid}")
         except ValueError:
             await message.answer("❌ /premium remove UID")
@@ -157,7 +168,7 @@ async def cmd_users(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
 
-    users = get_all_users_info()
+    users = await get_all_users_info()
     if not users:
         await message.answer("Нет пользователей")
         return
@@ -189,7 +200,7 @@ async def cmd_users(message: Message):
 # =========================
 @router.business_connection()
 async def on_business_connect(event: BusinessConnection):
-    save_user(event.user.id, event.user.username or "")
+    await save_user(event.user.id, event.user.username or "")
     try:
         if event.is_enabled:
             await event.bot.send_message(
@@ -209,12 +220,12 @@ async def on_business_message(message: Message):
         if not message.business_connection_id:
             return
 
-        save_message(message, message.business_connection_id)
+        await save_message(message, message.business_connection_id)
 
         if (message.photo or message.video or message.voice
                 or message.video_note or message.document
                 or message.sticker):
-            save_disappearing(message, message.business_connection_id)
+            await save_disappearing(message, message.business_connection_id)
 
     except Exception as e:
         print(f"Save error: {e}")
@@ -226,7 +237,7 @@ async def on_business_edit(message: Message):
         if not message.business_connection_id:
             return
 
-        old_msg = get_message(
+        old_msg = await get_message(
             message.message_id,
             message.chat.id,
             message.business_connection_id
@@ -255,7 +266,7 @@ async def on_business_edit(message: Message):
         else:
             display = from_name
 
-        save_edit(
+        await save_edit(
             message.message_id, message.chat.id, from_name,
             old_text or "", new_text or "",
             message.business_connection_id
@@ -277,7 +288,7 @@ async def on_business_edit(message: Message):
             parse_mode="HTML"
         )
 
-        save_message(message, message.business_connection_id)
+        await save_message(message, message.business_connection_id)
 
     except Exception as e:
         print(f"Edit error: {e}")
@@ -292,22 +303,22 @@ async def on_messages_deleted(event: BusinessMessagesDeleted):
 
         for msg_id in event.message_ids:
             try:
-                row = get_message(msg_id, event.chat.id, conn_id)
+                row = await get_message(msg_id, event.chat.id, conn_id)
                 if not row:
                     continue
 
                 (_, _, chat_id, from_id, from_name,
                  text, media_type, file_id, date, _) = row
 
-                # Помечаем удалённым в БД
-                mark_message_deleted(msg_id, event.chat.id, conn_id)
+                # Помечаем удалённым
+                await mark_message_deleted(msg_id, event.chat.id, conn_id)
 
                 # Не уведомляем если владелец удалил своё
                 if from_id == owner_id:
                     continue
 
-                # Определяем имя
-                username = get_username_by_id(from_id) if from_id else None
+                # Имя отправителя
+                username = await get_username_by_id(from_id) if from_id else None
                 if username and username != "Unknown":
                     display = f"@{username}"
                 elif from_id:
@@ -318,7 +329,7 @@ async def on_messages_deleted(event: BusinessMessagesDeleted):
                 else:
                     display = from_name
 
-                premium = is_premium_user(owner_id)
+                premium = await is_premium_user(owner_id)
                 time_str = ""
                 if date:
                     time_str = date[:16].replace('T', ' ')
@@ -330,7 +341,6 @@ async def on_messages_deleted(event: BusinessMessagesDeleted):
                 )
 
                 if media_type is None:
-                    # Текстовое
                     await event.bot.send_message(
                         owner_id,
                         header + f"\n\n<blockquote>"
@@ -339,7 +349,6 @@ async def on_messages_deleted(event: BusinessMessagesDeleted):
                     )
 
                 elif premium:
-                    # Premium — отправляем медиа
                     try:
                         if media_type == "photo":
                             await event.bot.send_photo(
@@ -383,7 +392,6 @@ async def on_messages_deleted(event: BusinessMessagesDeleted):
                         )
 
                 else:
-                    # Free — без медиа
                     emoji_map = {
                         "photo": "📸", "video": "🎥",
                         "voice": "🎤", "document": "📁",
