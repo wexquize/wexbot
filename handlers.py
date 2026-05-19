@@ -435,3 +435,21 @@ async def on_messages_deleted(event: BusinessMessagesDeleted):
                 print(f"❌ Ошибка удаления {msg_id}: {e}")
     except Exception as e:
         print(f"❌ Ошибка deleted: {e}")
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+
+MINIAPP_URL = "https://wexquize.github.io/wexbot/"
+
+@router.message(Command("app"))
+async def cmd_app(message: Message):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text="👁 Открыть wexquize mode",
+            web_app=WebAppInfo(url=MINIAPP_URL)
+        )
+    ]])
+    await message.answer(
+        "👁 <b>wexquize mode App</b>\n\n"
+        "Статистика, история и ИИ — всё здесь.",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
